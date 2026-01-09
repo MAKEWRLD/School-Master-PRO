@@ -1,13 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Save, Download, CreditCard, Lock, ArrowLeft, 
-  Eye, Edit3, X, Check, Loader2, Info
+  Eye, Edit3, X, Check, Loader2, Info, History, RotateCcw
 } from 'lucide-react';
-import { AcademicWork, WorkStatus, PaymentMethod, AcademicContent } from '../types';
+import { AcademicWork, WorkStatus, PaymentMethod, AcademicContent, ContentVersion } from '../types';
 import { ABNTPreview } from '../components/ABNTPreview';
 import { StorageService } from '../services/storage';
+import { exportToPDF } from '../services/abntService';
 
 interface EditorPageProps {
   works: AcademicWork[];
@@ -19,11 +19,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
   const navigate = useNavigate();
   const work = works.find(w => w.id === id);
   
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('preview');
+  const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'history'>('preview');
   const [showPayment, setShowPayment] = useState(false);
   const [editingContent, setEditingContent] = useState<AcademicContent | null>(work?.content || null);
   const [isSaving, setIsSaving] = useState(false);
   const [showSavedMsg, setShowSavedMsg] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (showSavedMsg) {
@@ -34,18 +35,52 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
 
   if (!work) return <div className="p-20 text-center academic-font text-2xl">Trabalho não encontrado.</div>;
 
-  const handleSave = async () => {
+  const handleSave = async (isAutoSave = false) => {
     if (!editingContent) return;
     setIsSaving(true);
     
-    // Simular delay de rede
-    await new Promise(r => setTimeout(r, 800));
+    const newVersion: ContentVersion = {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: Date.now(),
+      content: { ...editingContent },
+      label: isAutoSave ? 'Salvamento Automático' : 'Versão Manual'
+    };
+
+    const updatedVersions = [...(work.versions || []), newVersion];
     
-    onUpdate(work.id, { content: editingContent });
-    StorageService.saveWork({ ...work, content: editingContent });
+    onUpdate(work.id, { 
+      content: editingContent, 
+      versions: updatedVersions,
+      updatedAt: Date.now()
+    });
+    
+    StorageService.saveWork({ 
+      ...work, 
+      content: editingContent, 
+      versions: updatedVersions,
+      updatedAt: Date.now()
+    });
     
     setIsSaving(false);
-    setShowSavedMsg(true);
+    if (!isAutoSave) setShowSavedMsg(true);
+  };
+
+  const handleRestoreVersion = (version: ContentVersion) => {
+    setEditingContent(version.content);
+    setActiveTab('editor');
+    alert("Versão restaurada no editor. Lembre-se de salvar.");
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      await exportToPDF(work);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao exportar PDF.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const simulatePayment = () => {
@@ -98,21 +133,32 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
                 <Edit3 className="h-4 w-4 mr-2" />
                 Editor
               </button>
+              <button 
+                onClick={() => setActiveTab('history')}
+                className={`flex items-center px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'history' ? 'bg-white text-blue-900 shadow-lg scale-[1.05]' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                <History className="h-4 w-4 mr-2" />
+                Histórico
+              </button>
             </div>
 
             <button 
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={isSaving}
               className="flex items-center px-4 py-2 text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-100 rounded-xl transition-all disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Guardar
+              Salvar
             </button>
 
             {isPaid ? (
-              <button className="flex items-center px-6 py-2 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20">
-                <Download className="h-4 w-4 mr-2" />
-                Exportar
+              <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                className="flex items-center px-6 py-2 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20"
+              >
+                {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                Exportar ABNT
               </button>
             ) : (
               <button 
@@ -130,31 +176,41 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
       <div className="flex-grow overflow-y-auto bg-slate-100 scroll-smooth">
         <div className="max-w-7xl mx-auto px-6 py-10">
           
-          {/* Alerta de Modo de Edição */}
-          {!isPaid && activeTab === 'editor' && (
-            <div className="mb-8 bg-blue-900 text-white rounded-[2rem] p-8 shadow-2xl relative overflow-hidden group">
-               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div className="flex items-start space-x-6">
-                    <div className="p-4 bg-white/10 rounded-3xl">
-                      <Lock className="h-8 w-8 text-blue-200" />
+          {activeTab === 'history' ? (
+            <div className="max-w-3xl mx-auto bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">
+              <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+                <h2 className="text-xl font-black text-slate-900 academic-font uppercase tracking-widest">Histórico de Versões</h2>
+                <div className="text-xs text-slate-400 font-bold">{work.versions?.length || 0} versões salvas</div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {work.versions?.slice().reverse().map((v, i) => (
+                  <div key={v.id} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-900 flex items-center justify-center mr-4">
+                        <History className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900">{v.label || `Versão ${work.versions.length - i}`}</div>
+                        <div className="text-xs text-slate-400">{new Date(v.timestamp).toLocaleString()}</div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-2xl font-black academic-font">Projecto Protegido</h3>
-                      <p className="text-blue-100 mt-1 max-w-md">Estás a visualizar o rascunho inteligente. Desbloqueia para editar todas as secções e exportar o PDF oficial sem marcas de água.</p>
-                    </div>
+                    <button 
+                      onClick={() => handleRestoreVersion(v)}
+                      className="flex items-center px-4 py-2 text-blue-900 font-bold text-xs uppercase tracking-widest border border-blue-100 rounded-lg hover:bg-blue-900 hover:text-white transition-all"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-2" />
+                      Restaurar
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => setShowPayment(true)}
-                    className="bg-white text-blue-900 px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform whitespace-nowrap"
-                  >
-                    Desbloquear Agora
-                  </button>
-               </div>
-               <div className="absolute top-0 right-0 h-full w-1/3 bg-white/5 skew-x-12 -translate-y-4"></div>
+                ))}
+                {(!work.versions || work.versions.length === 0) && (
+                  <div className="p-12 text-center text-slate-400">
+                    Nenhuma versão salva ainda. O sistema salva automaticamente quando você clica em "Salvar".
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-
-          {activeTab === 'preview' ? (
+          ) : activeTab === 'preview' ? (
             <div className="flex flex-col items-center">
               <ABNTPreview work={work} />
             </div>
@@ -162,9 +218,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
             <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {editingContent && (
                 <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 p-12 space-y-12">
-                  <div className="flex items-center space-x-4 pb-6 border-b border-slate-50">
-                    <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">1</div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Introdução</h2>
+                  <div className="flex items-center justify-between border-b border-slate-50 pb-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">1</div>
+                      <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Introdução</h2>
+                    </div>
+                    <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Limite: ~300 palavras</span>
                   </div>
                   
                   <div className="relative">
@@ -183,9 +242,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
                     )}
                   </div>
 
-                  <div className="flex items-center space-x-4 pt-12 pb-6 border-b border-slate-50">
-                    <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">2</div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Desenvolvimento</h2>
+                  <div className="flex items-center justify-between border-b border-slate-50 pt-12 pb-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">2</div>
+                      <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Desenvolvimento</h2>
+                    </div>
+                    <button className="text-[10px] text-blue-600 font-bold uppercase tracking-widest hover:underline">Adicionar Citação</button>
                   </div>
 
                   <textarea 
@@ -201,6 +263,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
 
                   <textarea 
                     className="w-full h-64 p-8 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-900 focus:ring-4 focus:ring-blue-50 academic-font text-base leading-relaxed bg-slate-50/50"
+                    placeholder="AUTOR. Título: subtítulo. Edição. Local: Editora, ano."
                     value={editingContent.referencias}
                     onChange={e => setEditingContent({...editingContent, referencias: e.target.value})}
                   />
@@ -245,9 +308,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-tight">Pagamento Imediato</p>
                       </div>
                     </div>
-                    <div className="h-8 w-8 rounded-full border-2 border-slate-200 group-hover:border-blue-900 group-hover:bg-blue-900 transition-all flex items-center justify-center">
-                       <div className="h-2 w-2 rounded-full bg-white opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    </div>
                   </button>
                 ))}
               </div>
@@ -259,9 +319,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
                 >
                   Pagar Agora
                 </button>
-                <p className="text-center text-xs text-slate-400 mt-6 font-medium">
-                  Ao pagar, desbloqueias a edição completa e exportação ABNT oficial.
-                </p>
               </div>
             </div>
           </div>

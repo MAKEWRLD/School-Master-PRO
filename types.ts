@@ -1,4 +1,3 @@
-
 export enum WorkType {
   SIMPLE = 'Trabalho Escolar Simples',
   TECHNICAL = 'Trabalho Técnico',
@@ -35,6 +34,13 @@ export interface AcademicContent {
   referencias: string;
 }
 
+export interface ContentVersion {
+  id: string;
+  timestamp: number;
+  content: AcademicContent;
+  label?: string;
+}
+
 export interface AcademicWork {
   id: string;
   userId: string;
@@ -52,6 +58,7 @@ export interface AcademicWork {
   price: number;
   createdAt: number;
   updatedAt: number;
+  versions: ContentVersion[];
 }
 
 export interface UserProfile {

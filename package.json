@@ -13,7 +13,8 @@
     "react-dom": "^19.2.3",
     "@google/genai": "^1.35.0",
     "react-router-dom": "^7.12.0",
-    "lucide-react": "^0.562.0"
+    "lucide-react": "^0.562.0",
+    "pdfmake": "^0.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,4 +1,3 @@
-
 import { AcademicWork, UserProfile } from '../types';
 
 const KEYS = {
@@ -25,8 +24,17 @@ export const StorageService = {
     let allWorks: AcademicWork[] = data ? JSON.parse(data) : [];
     const index = allWorks.findIndex(w => w.id === work.id);
     
-    if (index > -1) allWorks[index] = { ...work, updatedAt: Date.now() };
-    else allWorks.push({ ...work, createdAt: Date.now(), updatedAt: Date.now() });
+    // Ensure versions is always an array
+    const workToSave = {
+      ...work,
+      versions: work.versions || []
+    };
+
+    if (index > -1) {
+      allWorks[index] = { ...workToSave, updatedAt: Date.now() };
+    } else {
+      allWorks.push({ ...workToSave, createdAt: Date.now(), updatedAt: Date.now() });
+    }
     
     localStorage.setItem(KEYS.WORKS, JSON.stringify(allWorks));
   }

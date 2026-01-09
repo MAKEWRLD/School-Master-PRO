@@ -31,7 +31,7 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
         tone: form.tone
       });
 
-      // Fix: Added missing updatedAt property to match AcademicWork interface
+      // Fix: Added missing versions property to match AcademicWork interface
       const newWork: AcademicWork = {
         id: Math.random().toString(36).substr(2, 9),
         userId: user.id,
@@ -48,7 +48,8 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
         status: WorkStatus.PENDING_PAYMENT,
         price: WorkPricing[form.type],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        versions: []
       };
 
       onCreated(newWork);

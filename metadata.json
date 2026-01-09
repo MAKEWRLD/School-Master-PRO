@@ -1,0 +1,5 @@
+{
+  "name": "SchoolMaster",
+  "description": "Uma plataforma académica inteligente para criação automática de trabalhos escolares e universitários seguindo as normas ABNT, com sistema de pagamento por trabalho.",
+  "requestFramePermissions": []
+}

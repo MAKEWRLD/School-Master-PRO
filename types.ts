@@ -28,11 +28,26 @@ export enum WorkStatus {
 
 export type AcademicNorm = 'ABNT' | 'APA' | 'CHICAGO' | 'VANCOUVER';
 
+export interface AcademicSection {
+  title: string;
+  content: string;
+  subsections?: { title: string; content: string }[];
+}
+
 export interface AcademicContent {
-  capa: string;
+  capa: {
+    instituicao: string;
+    autor: string;
+    titulo: string;
+    cidade: string;
+    ano: string;
+  };
   folhaRosto: string;
+  resumo: string;
+  abstract: string;
+  sumario: { title: string; page: number }[];
   introducao: string;
-  desenvolvimento: string;
+  desenvolvimento: AcademicSection[];
   conclusao: string;
   referencias: string;
 }
@@ -42,7 +57,8 @@ export interface ContentVersion {
   timestamp: number;
   content: AcademicContent;
   label?: string;
-  authorId: string;
+  // Added authorId to track who created this version
+  authorId?: string;
 }
 
 export interface AcademicWork {
@@ -63,7 +79,6 @@ export interface AcademicWork {
   createdAt: number;
   updatedAt: number;
   versions: ContentVersion[];
-  paymentId?: string;
 }
 
 export interface UserProfile {
@@ -74,13 +89,6 @@ export interface UserProfile {
   course: string;
   city: string;
   points: number;
-  avatar?: string;
+  isVerified: boolean;
   token?: string;
-}
-
-export enum PaymentMethod {
-  UNITEL_MONEY = 'Unitel Money',
-  EXPRESS = 'Multicaixa Express',
-  PAYPAY = 'PayPay',
-  PAYPAL = 'PayPal'
 }

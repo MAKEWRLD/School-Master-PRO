@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { BookOpen, User, Mail, Lock, School, GraduationCap, MapPin, Loader2, AlertCircle } from 'lucide-react';
+import { BookOpen, User, Mail, Lock, School, GraduationCap, MapPin, Loader2, AlertCircle, Send, CheckCircle2 } from 'lucide-react';
 import { ApiService } from '../services/api';
 import { UserProfile } from '../types';
 
@@ -9,6 +9,7 @@ export const RegisterPage: React.FC<{ onRegister: (u: UserProfile) => void }> = 
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSent, setIsSent] = useState(false);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -24,15 +25,45 @@ export const RegisterPage: React.FC<{ onRegister: (u: UserProfile) => void }> = 
     setError(null);
 
     try {
-      const user = await ApiService.register(form);
-      onRegister(user);
-      navigate('/dashboard');
+      await ApiService.register(form);
+      setIsSent(true);
     } catch (err: any) {
       setError(err.message || 'Erro ao criar conta. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (isSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="max-w-md w-full bg-white rounded-[3rem] shadow-2xl p-12 text-center border border-slate-100 animate-in zoom-in duration-300">
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-blue-50 text-blue-900 rounded-full mb-8 shadow-inner">
+            <Send className="h-10 w-10 animate-bounce" />
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 academic-font mb-4">Verifique o seu Email</h2>
+          <p className="text-slate-500 mb-8 leading-relaxed">
+            Enviámos um link de verificação para <span className="font-bold text-slate-900">{form.email}</span>. 
+            Por favor, clique no link para ativar a sua conta PRO.
+          </p>
+          <div className="space-y-4">
+            <button 
+              onClick={() => navigate('/login')}
+              className="w-full bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] transition-all"
+            >
+              Ir para o Login
+            </button>
+            <button 
+              onClick={() => setIsSent(false)}
+              className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-blue-900 transition-colors"
+            >
+              Não recebi? Tentar novamente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 py-12">

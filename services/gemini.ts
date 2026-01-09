@@ -15,49 +15,77 @@ export const generateAcademicContent = async (params: {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
-    ATUE COMO UM DOUTOR ACADÉMICO SÉNIOR ESPECIALISTA EM NORMAS INTERNACIONAIS.
+    ATUE COMO UM DOUTOR ACADÉMICO SÉNIOR ESPECIALISTA EM NORMAS ABNT (NBR 14724, 6023, 10520).
     TEMA: "${params.title}"
-    TIPO DE TRABALHO: ${params.type}
-    NORMA ACADÉMICA: ${params.norm}
-    TOM DE VOZ: ${params.tone}
+    TIPO: ${params.type}
+    INSTITUIÇÃO: ${params.institution}
+    AUTOR: ${params.author}
 
-    OBJETIVO: Gerar conteúdo original, profundo e estritamente formatado conforme a norma solicitada.
+    REQUISITOS OBRIGATÓRIOS:
+    1. INTRODUÇÃO: Mínimo 3 parágrafos com justificativa e metodologia.
+    2. DESENVOLVIMENTO: Divida em pelo menos 2 seções numeradas (Ex: 2 FUNDAMENTAÇÃO, 3 ANÁLISE). Inclua citações bibliográficas.
+    3. RESUMO: Texto em parágrafo único, de 150 a 500 palavras.
+    4. ABSTRACT: Versão em inglês técnico do resumo.
+    5. REFERÊNCIAS: Mínimo 6 fontes reais formatadas conforme NBR 6023.
 
-    ESTRUTURA DE RESPOSTA (JSON):
-    1. INTRODUÇÃO: Contexto, tese central e objetivos.
-    2. DESENVOLVIMENTO: Argumentação baseada em evidências, citações no estilo ${params.norm}.
-    3. CONCLUSÃO: Síntese e recomendações.
-    4. REFERÊNCIAS: Mínimo 5 fontes credíveis formatadas em ${params.norm}.
-
-    IMPORTANTE: 
-    - Se a norma for APA, use citações (Autor, Ano). 
-    - Se for ABNT, use (AUTOR, ano).
-    - Mantenha o tom ${params.tone} em todo o documento.
+    ESTRUTURA DE RESPOSTA (JSON estrito):
+    {
+      "capa": { "instituicao": "...", "autor": "...", "titulo": "...", "cidade": "...", "ano": "..." },
+      "resumo": "...",
+      "abstract": "...",
+      "introducao": "...",
+      "desenvolvimento": [
+        { "title": "2 FUNDAMENTAÇÃO TEÓRICA", "content": "..." },
+        { "title": "3 RESULTADOS E DISCUSSÃO", "content": "..." }
+      ],
+      "conclusao": "...",
+      "referencias": "..."
+    }
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            capa: { type: Type.STRING },
-            folhaRosto: { type: Type.STRING },
+            capa: {
+              type: Type.OBJECT,
+              properties: {
+                instituicao: { type: Type.STRING },
+                autor: { type: Type.STRING },
+                titulo: { type: Type.STRING },
+                cidade: { type: Type.STRING },
+                ano: { type: Type.STRING }
+              },
+              required: ["instituicao", "autor", "titulo", "cidade", "ano"]
+            },
+            resumo: { type: Type.STRING },
+            abstract: { type: Type.STRING },
             introducao: { type: Type.STRING },
-            desenvolvimento: { type: Type.STRING },
+            desenvolvimento: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  content: { type: Type.STRING }
+                },
+                required: ["title", "content"]
+              }
+            },
             conclusao: { type: Type.STRING },
-            referencias: { type: Type.STRING },
+            referencias: { type: Type.STRING }
           },
-          required: ["capa", "folhaRosto", "introducao", "desenvolvimento", "conclusao", "referencias"]
+          required: ["capa", "resumo", "abstract", "introducao", "desenvolvimento", "conclusao", "referencias"]
         },
       },
     });
 
-    const result = response.text || '{}';
-    return JSON.parse(result);
+    return JSON.parse(response.text || '{}');
   } catch (error) {
     console.error("Erro na geração de IA:", error);
     throw error;

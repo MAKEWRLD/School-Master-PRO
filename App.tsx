@@ -5,17 +5,16 @@ import { Layout } from './components/Layout';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { VerifyPage } from './pages/VerifyPage';
 import { Dashboard } from './pages/Dashboard';
 import { NewWork } from './pages/NewWork';
 import { EditorPage } from './pages/EditorPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AcademicWork, UserProfile } from './types';
+import { ApiService } from './services/api';
 
-// Componente para proteger rotas privadas
 const PrivateRoute: React.FC<{ user: UserProfile | null; children: React.ReactElement }> = ({ user, children }) => {
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 };
 
@@ -30,6 +29,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Persistência em tempo real
   useEffect(() => {
     if (user) {
       localStorage.setItem('sm_user', JSON.stringify(user));
@@ -42,23 +42,15 @@ const App: React.FC = () => {
     localStorage.setItem('sm_works', JSON.stringify(works));
   }, [works]);
 
-  const addWork = (work: AcademicWork) => {
-    setWorks(prev => [work, ...prev]);
-  };
-
-  const updateWork = (id: string, updates: Partial<AcademicWork>) => {
-    setWorks(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
-  };
-
   const handleLogout = () => {
+    ApiService.logout();
     setUser(null);
   };
 
   return (
     <Router>
-      <Layout>
+      <Layout onLogout={handleLogout} user={user}>
         <Routes>
-          {/* Rotas Públicas */}
           <Route path="/" element={<LandingPage />} />
           <Route 
             path="/login" 
@@ -66,10 +58,10 @@ const App: React.FC = () => {
           />
           <Route 
             path="/register" 
-            element={user ? <Navigate to="/dashboard" /> : <RegisterPage onRegister={setUser} />} 
+            element={user ? <Navigate to="/dashboard" /> : <RegisterPage />} 
           />
+          <Route path="/verify/:token" element={<VerifyPage />} />
           
-          {/* Rotas Privadas protegidas pelo PrivateRoute */}
           <Route 
             path="/dashboard" 
             element={
@@ -82,7 +74,7 @@ const App: React.FC = () => {
             path="/new" 
             element={
               <PrivateRoute user={user}>
-                <NewWork user={user!} onCreated={addWork} />
+                <NewWork user={user!} onCreated={w => setWorks([w, ...works])} />
               </PrivateRoute>
             } 
           />
@@ -90,7 +82,7 @@ const App: React.FC = () => {
             path="/editor/:id" 
             element={
               <PrivateRoute user={user}>
-                <EditorPage works={works} onUpdate={updateWork} />
+                <EditorPage works={works} onUpdate={(id, upds) => setWorks(prev => prev.map(w => w.id === id ? {...w, ...upds} : w))} />
               </PrivateRoute>
             } 
           />
@@ -102,8 +94,6 @@ const App: React.FC = () => {
               </PrivateRoute>
             } 
           />
-          
-          {/* Redirecionamento Padrão */}
           <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} />} />
         </Routes>
       </Layout>

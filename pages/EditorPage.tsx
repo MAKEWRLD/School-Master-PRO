@@ -1,20 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import Quill from 'quill';
 import { 
   Save, Download, CreditCard, Lock, ArrowLeft, 
-  Eye, Edit3, X, Check, Loader2, Info, History, RotateCcw
+  Eye, Edit3, X, Check, Loader2, Info, History, 
+  RotateCcw, FileText, ChevronRight, AlertCircle, Trash2
 } from 'lucide-react';
 import { AcademicWork, WorkStatus, PaymentMethod, AcademicContent, ContentVersion } from '../types';
 import { ABNTPreview } from '../components/ABNTPreview';
 import { StorageService } from '../services/storage';
-import { exportToPDF } from '../services/abntService';
+import { ApiService } from '../services/api';
+import { exportToPDF, exportToDocx } from '../services/abntService';
 
-interface EditorPageProps {
-  works: AcademicWork[];
-  onUpdate: (id: string, updates: Partial<AcademicWork>) => void;
-}
-
-export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
+export const EditorPage: React.FC<{ works: AcademicWork[]; onUpdate: (id: string, updates: Partial<AcademicWork>) => void }> = ({ works, onUpdate }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const work = works.find(w => w.id === id);
@@ -24,26 +22,77 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
   const [editingContent, setEditingContent] = useState<AcademicContent | null>(work?.content || null);
   const [isSaving, setIsSaving] = useState(false);
   const [showSavedMsg, setShowSavedMsg] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExporting, setIsExporting] = useState<string | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [versionPreview, setVersionPreview] = useState<ContentVersion | null>(null);
 
+  const editorRef = useRef<HTMLDivElement>(null);
+  const quillInstance = useRef<Quill | null>(null);
+  const autoSaveTimer = useRef<number | null>(null);
+
+  // Initialize Quill for the main content (Desenvolvimento)
   useEffect(() => {
-    if (showSavedMsg) {
-      const timer = setTimeout(() => setShowSavedMsg(false), 3000);
-      return () => clearTimeout(timer);
+    if (activeTab === 'editor' && editorRef.current && !quillInstance.current) {
+      quillInstance.current = new Quill(editorRef.current, {
+        theme: 'snow',
+        placeholder: 'Escreve aqui o desenvolvimento do teu trabalho académico...',
+        modules: {
+          toolbar: [
+            [{ 'header': [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            ['link', 'blockquote', 'code-block'],
+            ['clean']
+          ]
+        }
+      });
+
+      if (editingContent?.desenvolvimento) {
+        quillInstance.current.setText(editingContent.desenvolvimento);
+      }
+
+      quillInstance.current.on('text-change', () => {
+        setEditingContent(prev => prev ? ({
+          ...prev,
+          desenvolvimento: quillInstance.current?.getText() || ''
+        }) : null);
+      });
     }
-  }, [showSavedMsg]);
+  }, [activeTab]);
+
+  // Auto-save logic
+  useEffect(() => {
+    if (activeTab === 'editor') {
+      autoSaveTimer.current = window.setInterval(() => {
+        handleAutoSave();
+      }, 30000); // 30 seconds
+    }
+    return () => {
+      if (autoSaveTimer.current) clearInterval(autoSaveTimer.current);
+    };
+  }, [activeTab, editingContent]);
 
   if (!work) return <div className="p-20 text-center academic-font text-2xl">Trabalho não encontrado.</div>;
 
-  const handleSave = async (isAutoSave = false) => {
+  const isPaid = work.status === WorkStatus.PAID || work.status === WorkStatus.READY;
+
+  const handleAutoSave = async () => {
+    if (!editingContent || isSaving || !isPaid) return;
+    setIsAutoSaving(true);
+    await handleSave(true);
+    setIsAutoSaving(false);
+  };
+
+  const handleSave = async (isAuto = false) => {
     if (!editingContent) return;
     setIsSaving(true);
     
     const newVersion: ContentVersion = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: 'ver_' + Math.random().toString(36).substr(2, 5),
       timestamp: Date.now(),
       content: { ...editingContent },
-      label: isAutoSave ? 'Salvamento Automático' : 'Versão Manual'
+      label: isAuto ? 'Auto-save' : 'Versão Manual',
+      authorId: work.userId
     };
 
     const updatedVersions = [...(work.versions || []), newVersion];
@@ -54,7 +103,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
       updatedAt: Date.now()
     });
     
-    StorageService.saveWork({ 
+    await ApiService.saveWork({ 
       ...work, 
       content: editingContent, 
       versions: updatedVersions,
@@ -62,263 +111,280 @@ export const EditorPage: React.FC<EditorPageProps> = ({ works, onUpdate }) => {
     });
     
     setIsSaving(false);
-    if (!isAutoSave) setShowSavedMsg(true);
+    if (!isAuto) setShowSavedMsg(true);
+    setTimeout(() => setShowSavedMsg(false), 3000);
   };
 
-  const handleRestoreVersion = (version: ContentVersion) => {
-    setEditingContent(version.content);
-    setActiveTab('editor');
-    alert("Versão restaurada no editor. Lembre-se de salvar.");
-  };
-
-  const handleExport = async () => {
-    setIsExporting(true);
+  const handleExport = async (format: 'pdf' | 'docx') => {
+    setIsExporting(format);
     try {
-      await exportToPDF(work);
+      if (format === 'pdf') await exportToPDF(work);
+      else await exportToDocx(work);
     } catch (err) {
-      console.error(err);
-      alert("Erro ao exportar PDF.");
+      alert("Erro ao exportar. Verifica a tua ligação.");
     } finally {
-      setIsExporting(false);
+      setIsExporting(null);
     }
   };
 
-  const simulatePayment = () => {
-    onUpdate(work.id, { status: WorkStatus.PAID });
-    setShowPayment(false);
-    alert("Pagamento confirmado! Acesso total desbloqueado.");
+  const handlePayment = async (method: string) => {
+    setIsSaving(true);
+    const success = await ApiService.processPayment(work.id, method);
+    if (success) {
+      onUpdate(work.id, { status: WorkStatus.PAID });
+      setShowPayment(false);
+      alert("Pagamento confirmado via " + method + "! Acesso total desbloqueado.");
+    }
+    setIsSaving(false);
   };
-
-  const isPaid = work.status === WorkStatus.PAID || work.status === WorkStatus.READY;
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* Barra de Ferramentas Fixa */}
+      {/* Top Header/Toolbar */}
       <div className="bg-white border-b border-slate-200 py-3 sticky top-16 z-40 shadow-sm">
         <div className="max-w-[1600px] mx-auto px-6 flex justify-between items-center">
           <div className="flex items-center flex-1">
-            <button 
-              onClick={() => navigate('/dashboard')} 
-              className="p-2 hover:bg-slate-100 rounded-xl mr-4 transition-colors"
-              title="Voltar ao Dashboard"
-            >
+            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-100 rounded-xl mr-4 transition-colors">
               <ArrowLeft className="h-5 w-5 text-slate-400" />
             </button>
             <div className="overflow-hidden">
-              <h1 className="font-black text-slate-900 truncate max-w-[200px] md:max-w-md academic-font">{work.title}</h1>
+              <h1 className="font-black text-slate-900 truncate max-w-md academic-font">{work.title}</h1>
               <div className="flex items-center space-x-2">
                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded">{work.type}</span>
-                 {showSavedMsg && (
-                   <span className="text-[10px] text-emerald-600 font-bold flex items-center animate-pulse">
-                     <Check className="h-3 w-3 mr-1" /> Guardado
-                   </span>
-                 )}
+                 {isAutoSaving && <span className="text-[10px] text-slate-400 font-bold animate-pulse">Auto-salvando...</span>}
+                 {showSavedMsg && <span className="text-[10px] text-emerald-600 font-bold flex items-center animate-bounce"><Check className="h-3 w-3 mr-1" /> Salvo</span>}
               </div>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
-            <div className="flex bg-slate-100 p-1.5 rounded-2xl mr-4">
-              <button 
-                onClick={() => setActiveTab('preview')}
-                className={`flex items-center px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'preview' ? 'bg-white text-blue-900 shadow-lg scale-[1.05]' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                <Eye className="h-4 w-4 mr-2" />
-                Preview
-              </button>
-              <button 
-                onClick={() => setActiveTab('editor')}
-                className={`flex items-center px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'editor' ? 'bg-white text-blue-900 shadow-lg scale-[1.05]' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                <Edit3 className="h-4 w-4 mr-2" />
-                Editor
-              </button>
-              <button 
-                onClick={() => setActiveTab('history')}
-                className={`flex items-center px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'history' ? 'bg-white text-blue-900 shadow-lg scale-[1.05]' : 'text-slate-400 hover:text-slate-600'}`}
-              >
-                <History className="h-4 w-4 mr-2" />
-                Histórico
-              </button>
+            <div className="flex bg-slate-100 p-1 rounded-2xl">
+              {[
+                { id: 'preview', icon: Eye, label: 'Preview' },
+                { id: 'editor', icon: Edit3, label: 'Editor' },
+                { id: 'history', icon: History, label: 'Histórico' }
+              ].map(tab => (
+                <button 
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center px-4 py-1.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === tab.id ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <tab.icon className="h-3.5 w-3.5 mr-1.5" />
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
-            <button 
-              onClick={() => handleSave()}
-              disabled={isSaving}
-              className="flex items-center px-4 py-2 text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-100 rounded-xl transition-all disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Salvar
-            </button>
+            <div className="h-6 w-px bg-slate-200 mx-2" />
 
             {isPaid ? (
-              <button 
-                onClick={handleExport}
-                disabled={isExporting}
-                className="flex items-center px-6 py-2 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20"
-              >
-                {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                Exportar ABNT
-              </button>
+              <div className="flex space-x-2">
+                <button 
+                  onClick={() => handleExport('pdf')}
+                  disabled={!!isExporting}
+                  className="flex items-center px-4 py-2 bg-emerald-600 text-white font-bold text-xs uppercase rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
+                >
+                  {isExporting === 'pdf' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
+                  PDF
+                </button>
+                <button 
+                  onClick={() => handleExport('docx')}
+                  disabled={!!isExporting}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white font-bold text-xs uppercase rounded-xl hover:bg-blue-700 transition disabled:opacity-50"
+                >
+                  {isExporting === 'docx' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5 mr-1.5" />}
+                  Word
+                </button>
+              </div>
             ) : (
               <button 
                 onClick={() => setShowPayment(true)}
-                className="flex items-center px-8 py-2 bg-blue-900 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-800 transition-all shadow-xl shadow-blue-900/20"
+                className="flex items-center px-6 py-2 bg-blue-900 text-white font-black text-xs uppercase rounded-xl hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
               >
                 <CreditCard className="h-4 w-4 mr-2" />
-                Desbloquear
+                Desbloquear PRO
               </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex-grow overflow-y-auto bg-slate-100 scroll-smooth">
+      {/* Main Content Area */}
+      <div className="flex-grow overflow-y-auto bg-slate-100">
         <div className="max-w-7xl mx-auto px-6 py-10">
           
-          {activeTab === 'history' ? (
-            <div className="max-w-3xl mx-auto bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">
-              <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-                <h2 className="text-xl font-black text-slate-900 academic-font uppercase tracking-widest">Histórico de Versões</h2>
-                <div className="text-xs text-slate-400 font-bold">{work.versions?.length || 0} versões salvas</div>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {work.versions?.slice().reverse().map((v, i) => (
-                  <div key={v.id} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-900 flex items-center justify-center mr-4">
-                        <History className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-900">{v.label || `Versão ${work.versions.length - i}`}</div>
-                        <div className="text-xs text-slate-400">{new Date(v.timestamp).toLocaleString()}</div>
-                      </div>
-                    </div>
+          {activeTab === 'preview' && <ABNTPreview work={work} />}
+
+          {activeTab === 'history' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="md:col-span-1 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-fit sticky top-0">
+                <div className="p-6 border-b bg-slate-50">
+                  <h3 className="font-black text-slate-900 academic-font uppercase text-sm tracking-widest">Linha do Tempo</h3>
+                </div>
+                <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+                  {work.versions?.slice().reverse().map((v) => (
                     <button 
-                      onClick={() => handleRestoreVersion(v)}
-                      className="flex items-center px-4 py-2 text-blue-900 font-bold text-xs uppercase tracking-widest border border-blue-100 rounded-lg hover:bg-blue-900 hover:text-white transition-all"
+                      key={v.id}
+                      onClick={() => setVersionPreview(v)}
+                      className={`w-full p-5 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group ${versionPreview?.id === v.id ? 'bg-blue-50 border-l-4 border-blue-900' : ''}`}
                     >
-                      <RotateCcw className="h-3 w-3 mr-2" />
-                      Restaurar
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm">{v.label}</div>
+                        <div className="text-[10px] text-slate-400 font-medium">{new Date(v.timestamp).toLocaleString()}</div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-blue-900" />
                     </button>
+                  ))}
+                  {(!work.versions || work.versions.length === 0) && (
+                    <div className="p-10 text-center text-slate-400 text-sm italic">Nenhuma versão registada.</div>
+                  )}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                {versionPreview ? (
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-blue-300">Visualização de Versão</span>
+                        <h3 className="text-lg font-bold">{new Date(versionPreview.timestamp).toLocaleString()}</h3>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setEditingContent(versionPreview.content);
+                          setActiveTab('editor');
+                          setVersionPreview(null);
+                        }}
+                        className="bg-white text-slate-900 px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center"
+                      >
+                        <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Esta
+                      </button>
+                    </div>
+                    <div className="p-10 prose prose-slate max-w-none academic-font leading-relaxed">
+                      <h4 className="font-bold uppercase mb-4">Desenvolvimento:</h4>
+                      <p>{versionPreview.content.desenvolvimento}</p>
+                      <hr className="my-8" />
+                      <h4 className="font-bold uppercase mb-4">Referências:</h4>
+                      <p className="whitespace-pre-line text-sm">{versionPreview.content.referencias}</p>
+                    </div>
                   </div>
-                ))}
-                {(!work.versions || work.versions.length === 0) && (
-                  <div className="p-12 text-center text-slate-400">
-                    Nenhuma versão salva ainda. O sistema salva automaticamente quando você clica em "Salvar".
+                ) : (
+                  <div className="h-[400px] border-2 border-dashed border-slate-300 rounded-3xl flex flex-col items-center justify-center text-slate-400">
+                    <History className="h-12 w-12 mb-4 opacity-20" />
+                    <p className="font-medium">Seleciona uma versão para pré-visualizar</p>
                   </div>
                 )}
               </div>
             </div>
-          ) : activeTab === 'preview' ? (
-            <div className="flex flex-col items-center">
-              <ABNTPreview work={work} />
-            </div>
-          ) : (
-            <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {editingContent && (
-                <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 p-12 space-y-12">
-                  <div className="flex items-center justify-between border-b border-slate-50 pb-6">
-                    <div className="flex items-center space-x-4">
-                      <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">1</div>
-                      <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Introdução</h2>
-                    </div>
-                    <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Limite: ~300 palavras</span>
-                  </div>
-                  
-                  <div className="relative">
-                    <textarea 
-                      className={`w-full h-64 p-8 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-900 focus:ring-4 focus:ring-blue-50 academic-font text-lg leading-relaxed transition-all ${!isPaid ? 'opacity-50 select-none pointer-events-none' : ''}`}
-                      placeholder="Inicia a tua introdução académica aqui..."
-                      value={editingContent.introducao}
-                      onChange={e => setEditingContent({...editingContent, introducao: e.target.value})}
-                    />
-                    {!isPaid && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white/20 backdrop-blur-[2px] rounded-3xl">
-                         <div className="bg-white px-6 py-3 rounded-2xl shadow-xl border flex items-center font-bold text-slate-600">
-                            <Lock className="h-4 w-4 mr-2 text-blue-900" /> Edição bloqueada
-                         </div>
+          )}
+
+          {activeTab === 'editor' && (
+            <div className="max-w-4xl mx-auto space-y-8 pb-20">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 p-12 space-y-12 relative">
+                
+                {!isPaid && (
+                  <div className="absolute inset-0 z-10 bg-white/40 backdrop-blur-sm rounded-[2.5rem] flex items-center justify-center p-12 text-center">
+                    <div className="max-w-md bg-white p-10 rounded-3xl shadow-2xl border border-slate-100 flex flex-col items-center">
+                      <div className="w-16 h-16 bg-blue-100 text-blue-900 rounded-full flex items-center justify-center mb-6">
+                        <Lock className="h-8 w-8" />
                       </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between border-b border-slate-50 pt-12 pb-6">
-                    <div className="flex items-center space-x-4">
-                      <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">2</div>
-                      <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Desenvolvimento</h2>
+                      <h3 className="text-2xl font-black academic-font mb-4">Edição Bloqueada</h3>
+                      <p className="text-slate-500 mb-8">Efectua o pagamento único para desbloquear o editor WYSIWYG, auto-save e exportação profissional.</p>
+                      <button onClick={() => setShowPayment(true)} className="w-full bg-blue-900 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform">
+                        Desbloquear SchoolMaster PRO
+                      </button>
                     </div>
-                    <button className="text-[10px] text-blue-600 font-bold uppercase tracking-widest hover:underline">Adicionar Citação</button>
                   </div>
+                )}
 
-                  <textarea 
-                    className="w-full h-[600px] p-8 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-900 focus:ring-4 focus:ring-blue-50 academic-font text-lg leading-relaxed transition-all"
-                    value={editingContent.desenvolvimento}
-                    onChange={e => setEditingContent({...editingContent, desenvolvimento: e.target.value})}
-                  />
-
-                  <div className="flex items-center space-x-4 pt-12 pb-6 border-b border-slate-50">
-                    <div className="h-10 w-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center font-black">3</div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Referências</h2>
-                  </div>
-
-                  <textarea 
-                    className="w-full h-64 p-8 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-900 focus:ring-4 focus:ring-blue-50 academic-font text-base leading-relaxed bg-slate-50/50"
-                    placeholder="AUTOR. Título: subtítulo. Edição. Local: Editora, ano."
-                    value={editingContent.referencias}
-                    onChange={e => setEditingContent({...editingContent, referencias: e.target.value})}
-                  />
+                <div className="flex items-center justify-between border-b border-slate-50 pb-6">
+                   <div className="flex items-center space-x-4">
+                      <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Introdução</h2>
+                   </div>
                 </div>
-              )}
+                <textarea 
+                  className="w-full h-48 p-8 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-900 focus:ring-4 focus:ring-blue-50 academic-font text-lg leading-relaxed transition-all"
+                  value={editingContent?.introducao}
+                  onChange={e => setEditingContent(prev => prev ? ({...prev, introducao: e.target.value}) : null)}
+                />
+
+                <div className="flex items-center justify-between border-b border-slate-50 pt-12 pb-6">
+                   <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Desenvolvimento (WYSIWYG)</h2>
+                </div>
+                <div className="rounded-3xl border-2 border-slate-100 overflow-hidden">
+                  <div ref={editorRef} className="h-[600px]" />
+                </div>
+
+                <div className="flex items-center justify-between border-b border-slate-50 pt-12 pb-6">
+                   <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest academic-font">Referências Bibliográficas</h2>
+                   <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                     <AlertCircle className="h-3 w-3 mr-1" /> Formato ABNT Sugerido
+                   </div>
+                </div>
+                <textarea 
+                  className="w-full h-48 p-8 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-900 focus:ring-4 focus:ring-blue-50 academic-font text-base leading-relaxed bg-slate-50/50"
+                  value={editingContent?.referencias}
+                  onChange={e => setEditingContent(prev => prev ? ({...prev, referencias: e.target.value}) : null)}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-4">
+                <button 
+                   onClick={() => handleSave()}
+                   disabled={isSaving}
+                   className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-900 transition-all shadow-xl flex items-center disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar Nova Versão
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Payment Modal */}
+      {/* Payment Modal PRO */}
       {showPayment && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] max-w-lg w-full overflow-hidden border border-white/20">
-            <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-2xl font-black text-slate-900 academic-font">Activação do Projecto</h2>
-              <button onClick={() => setShowPayment(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                <X className="h-6 w-6 text-slate-400" />
-              </button>
-            </div>
-            <div className="p-10 space-y-8">
-              <div className="text-center space-y-2">
-                <div className="text-sm font-bold text-slate-400 uppercase tracking-widest">Valor Unitário</div>
-                <div className="text-6xl font-black text-blue-900 tracking-tighter">{work.price.toLocaleString()} <span className="text-2xl">Kz</span></div>
-                <div className="inline-flex items-center text-emerald-600 text-xs font-bold bg-emerald-50 px-3 py-1 rounded-full mt-4">
-                   <Info className="h-3 w-3 mr-1" /> Acesso vitalício a este trabalho
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-[3rem] shadow-2xl max-w-xl w-full overflow-hidden animate-in zoom-in duration-300">
+            <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
+              <div className="flex items-center">
+                <div className="p-3 bg-blue-900 text-white rounded-2xl mr-4 shadow-lg shadow-blue-900/20">
+                  <CreditCard className="h-6 w-6" />
                 </div>
+                <h2 className="text-2xl font-black text-slate-900 academic-font">Checkout PRO</h2>
+              </div>
+              <button onClick={() => setShowPayment(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X /></button>
+            </div>
+            <div className="p-12 space-y-10">
+              <div className="flex items-center justify-between bg-blue-50 p-6 rounded-3xl border border-blue-100">
+                 <div>
+                    <h4 className="font-bold text-blue-900">{work.type}</h4>
+                    <p className="text-xs text-blue-600 font-medium">Desbloqueio definitivo do projecto</p>
+                 </div>
+                 <div className="text-3xl font-black text-blue-900">{work.price.toLocaleString()} Kz</div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
-                {[PaymentMethod.UNITEL_MONEY, PaymentMethod.EXPRESS, PaymentMethod.PAYPAY].map(method => (
+              <div className="grid grid-cols-2 gap-4">
+                {['Unitel Money', 'Express', 'PayPay', 'PayPal'].map(m => (
                   <button 
-                    key={method}
-                    className="group w-full p-6 border-2 border-slate-100 rounded-3xl flex items-center justify-between hover:border-blue-900 hover:bg-blue-50 transition-all text-left relative overflow-hidden"
+                    key={m}
+                    disabled={isSaving}
+                    onClick={() => handlePayment(m)}
+                    className="p-6 border-2 border-slate-100 rounded-2xl flex flex-col items-center hover:border-blue-900 hover:bg-blue-50 transition-all disabled:opacity-50"
                   >
-                    <div className="flex items-center relative z-10">
-                      <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mr-5 group-hover:bg-white transition-colors">
-                        <CreditCard className="h-7 w-7 text-blue-900" />
-                      </div>
-                      <div>
-                        <span className="font-black text-slate-800 text-lg">{method}</span>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-tight">Pagamento Imediato</p>
-                      </div>
-                    </div>
+                    <div className="text-lg font-black text-slate-800">{m}</div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Processamento Seguro</span>
                   </button>
                 ))}
               </div>
 
-              <div className="pt-6">
-                <button 
-                  onClick={simulatePayment}
-                  className="w-full bg-blue-900 text-white py-6 rounded-[2rem] font-black text-xl hover:bg-blue-800 transition-all shadow-2xl shadow-blue-900/30 hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  Pagar Agora
-                </button>
+              <div className="text-center pt-4">
+                <p className="text-xs text-slate-400 mb-2">Ambiente criptografado SSL 256-bit</p>
+                <div className="flex justify-center space-x-2 grayscale opacity-30">
+                   <div className="w-8 h-5 bg-slate-400 rounded-sm" />
+                   <div className="w-8 h-5 bg-slate-400 rounded-sm" />
+                   <div className="w-8 h-5 bg-slate-400 rounded-sm" />
+                </div>
               </div>
             </div>
           </div>

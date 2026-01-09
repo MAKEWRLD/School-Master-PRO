@@ -1,15 +1,11 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sparkles, Loader2, Check } from 'lucide-react';
-import { WorkType, WorkPricing, AcademicWork, UserProfile, WorkStatus } from '../types';
+import { ArrowLeft, Sparkles, Loader2, Check, Globe } from 'lucide-react';
+import { WorkType, WorkPricing, AcademicWork, UserProfile, WorkStatus, AcademicNorm } from '../types';
 import { generateAcademicContent } from '../services/gemini';
 
-interface NewWorkProps {
-  user: UserProfile;
-  onCreated: (w: AcademicWork) => void;
-}
-
-export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
+export const NewWork: React.FC<{ user: UserProfile; onCreated: (w: AcademicWork) => void }> = ({ user, onCreated }) => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -20,18 +16,15 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
     course: user.course,
     author: user.name,
     city: user.city,
-    tone: 'Académico'
+    tone: 'Formal e Académico',
+    norm: 'ABNT' as AcademicNorm
   });
 
   const handleGenerate = async () => {
     setLoading(true);
     try {
-      const content = await generateAcademicContent({
-        ...form,
-        tone: form.tone
-      });
+      const content = await generateAcademicContent(form);
 
-      // Fix: Added missing versions property to match AcademicWork interface
       const newWork: AcademicWork = {
         id: Math.random().toString(36).substr(2, 9),
         userId: user.id,
@@ -42,7 +35,7 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
         author: form.author,
         city: form.city,
         year: new Date().getFullYear().toString(),
-        norm: 'ABNT',
+        norm: form.norm,
         tone: form.tone,
         content: content,
         status: WorkStatus.PENDING_PAYMENT,
@@ -55,186 +48,96 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
       onCreated(newWork);
       navigate(`/editor/${newWork.id}`);
     } catch (err) {
-      alert("Ocorreu um erro ao gerar o trabalho. Tente novamente.");
+      alert("Erro ao gerar. Tente novamente.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <button 
-        onClick={() => step > 1 ? setStep(step - 1) : navigate('/dashboard')}
-        className="flex items-center text-slate-500 hover:text-slate-900 mb-8 transition"
-      >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Voltar
-      </button>
-
-      <div className="mb-12">
-        <div className="flex items-center space-x-4 mb-2">
-          {[1, 2, 3].map(s => (
-            <div key={s} className="flex items-center">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${step >= s ? 'bg-blue-900 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                {step > s ? <Check className="h-4 w-4" /> : s}
-              </div>
-              {s < 3 && <div className={`w-12 h-0.5 mx-2 ${step > s ? 'bg-blue-900' : 'bg-slate-200'}`} />}
-            </div>
-          ))}
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <div className="mb-12 flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-black text-slate-900 academic-font">Criador Inteligente PRO</h1>
+          <p className="text-slate-500 mt-2">Personalize as normas e o tom para um trabalho perfeito.</p>
         </div>
-        <h1 className="text-3xl font-bold text-slate-900">
-          {step === 1 && "Escolha o tipo de trabalho"}
-          {step === 2 && "Detalhes do projecto"}
-          {step === 3 && "Configurações finais"}
-        </h1>
-        <p className="text-slate-500">
-          {step === 1 && "Selecione a categoria que melhor se adapta à sua necessidade."}
-          {step === 2 && "Insira as informações básicas para a formatação ABNT."}
-          {step === 3 && "Ajuste o tom de voz e revise as informações."}
-        </p>
+        <button onClick={() => navigate('/dashboard')} className="p-3 hover:bg-slate-100 rounded-2xl"><X /></button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-xl p-8">
-        {step === 1 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {Object.entries(WorkPricing).map(([type, price]) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setForm({...form, type: type as WorkType});
-                  setStep(2);
-                }}
-                className={`p-6 border-2 rounded-xl text-left transition hover:border-blue-900 group ${form.type === type ? 'border-blue-900 bg-blue-50' : 'border-slate-100'}`}
-              >
-                <div className="font-bold text-slate-900 group-hover:text-blue-900 mb-1">{type}</div>
-                <div className="text-slate-500 text-sm mb-4">Formatação ABNT inclusa</div>
-                <div className="text-lg font-bold text-blue-900">{price.toLocaleString()} Kz</div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-xl space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tema do Trabalho</label>
+              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Tema Central</label>
               <input 
                 type="text" 
-                className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
-                placeholder="Ex: O impacto da IA no mercado de trabalho em Angola"
+                className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 text-lg font-bold"
+                placeholder="Ex: Inteligência Artificial na Educação"
                 value={form.title}
                 onChange={e => setForm({...form, title: e.target.value})}
               />
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Instituição</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
-                  value={form.institution}
-                  onChange={e => setForm({...form, institution: e.target.value})}
-                />
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Norma Académica</label>
+                <select 
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 font-bold"
+                  value={form.norm}
+                  onChange={e => setForm({...form, norm: e.target.value as AcademicNorm})}
+                >
+                  <option value="ABNT">ABNT (Brasil/Portugal)</option>
+                  <option value="APA">APA (Internacional)</option>
+                  <option value="CHICAGO">Chicago</option>
+                  <option value="VANCOUVER">Vancouver (Saúde)</option>
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Curso</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
-                  value={form.course}
-                  onChange={e => setForm({...form, course: e.target.value})}
-                />
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Tom do Texto</label>
+                <select 
+                  className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl focus:ring-4 focus:ring-blue-100 font-bold"
+                  value={form.tone}
+                  onChange={e => setForm({...form, tone: e.target.value})}
+                >
+                  <option>Formal e Académico</option>
+                  <option>Técnico e Analítico</option>
+                  <option>Crítico e Reflexivo</option>
+                  <option>Objetivo e Direto</option>
+                </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Autor</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
-                  value={form.author}
-                  onChange={e => setForm({...form, author: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
-                  value={form.city}
-                  onChange={e => setForm({...form, city: e.target.value})}
-                />
-              </div>
-            </div>
-            <button 
-              onClick={() => setStep(3)}
-              disabled={!form.title}
-              className="w-full bg-blue-900 text-white py-4 rounded-xl font-bold hover:bg-blue-800 transition disabled:opacity-50"
-            >
-              Continuar
-            </button>
           </div>
-        )}
+        </div>
 
-        {step === 3 && (
-          <div className="space-y-8">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-3">Tom do Texto</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {['Formal', 'Técnico', 'Académico', 'Objetivo'].map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setForm({...form, tone: t})}
-                    className={`py-2 px-4 rounded-lg border-2 text-sm font-semibold transition ${form.tone === t ? 'border-blue-900 bg-blue-50 text-blue-900' : 'border-slate-100 text-slate-500'}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-6 rounded-xl space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Tipo de Trabalho</span>
+        <div className="space-y-6">
+          <div className="bg-blue-900 p-8 rounded-[2rem] text-white shadow-2xl">
+            <h3 className="text-xl font-bold mb-4">Resumo do Pedido</h3>
+            <div className="space-y-4 text-sm opacity-90 mb-8">
+              <div className="flex justify-between border-b border-white/10 pb-2">
+                <span>Tipo</span>
                 <span className="font-bold">{form.type}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Tema</span>
-                <span className="font-bold max-w-xs text-right truncate">{form.title}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Norma</span>
-                <span className="font-bold">ABNT</span>
-              </div>
-              <div className="border-t pt-3 flex justify-between items-center mt-4">
-                <span className="text-lg font-bold text-slate-900">Total a Pagar</span>
-                <span className="text-2xl font-black text-blue-900">{WorkPricing[form.type].toLocaleString()} Kz</span>
+              <div className="flex justify-between border-b border-white/10 pb-2">
+                <span>Norma</span>
+                <span className="font-bold">{form.norm}</span>
               </div>
             </div>
-
+            <div className="text-4xl font-black mb-8">{WorkPricing[form.type].toLocaleString()} <span className="text-lg">Kz</span></div>
             <button 
               onClick={handleGenerate}
-              disabled={loading}
-              className="w-full bg-blue-900 text-white py-5 rounded-2xl font-bold text-xl hover:bg-blue-800 transition flex items-center justify-center shadow-2xl"
+              disabled={loading || !form.title}
+              className="w-full bg-white text-blue-900 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 transition disabled:opacity-50 flex items-center justify-center"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="h-6 w-6 mr-3 animate-spin" />
-                  Gerando Trabalho Inteligente...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-6 w-6 mr-3" />
-                  Gerar Trabalho Agora
-                </>
-              )}
+              {loading ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Gerar com IA PRO
             </button>
-            <p className="text-center text-xs text-slate-400">
-              Ao clicar, nossa IA processará o conteúdo conforme as normas ABNT.
-            </p>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
 };
+
+const X = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+);

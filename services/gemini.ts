@@ -1,7 +1,6 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { WorkType } from "../types";
 
-// Fix: Removed top-level client initialization to follow SDK guidelines
+import { GoogleGenAI, Type } from "@google/genai";
+import { WorkType, AcademicNorm } from "../types";
 
 export const generateAcademicContent = async (params: {
   title: string;
@@ -11,21 +10,29 @@ export const generateAcademicContent = async (params: {
   author: string;
   city: string;
   tone: string;
+  norm: AcademicNorm;
 }) => {
-  // Fix: Initializing GoogleGenAI right before use with direct process.env.API_KEY reference
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
-    Gere um trabalho académico completo para o tema: "${params.title}".
-    Tipo de trabalho: ${params.type}.
-    Instituição: ${params.institution}.
-    Curso: ${params.course}.
-    Autor: ${params.author}.
-    Cidade: ${params.city}.
-    Tom: ${params.tone}.
-    
-    O trabalho deve seguir rigorosamente as normas ABNT.
-    Forneça o conteúdo estruturado em: Capa, Folha de Rosto, Introdução, Desenvolvimento (com subtítulos se necessário), Conclusão e Referências Bibliográficas (em formato ABNT).
+    ATUE COMO UM DOUTOR ACADÉMICO SÉNIOR ESPECIALISTA EM NORMAS INTERNACIONAIS.
+    TEMA: "${params.title}"
+    TIPO DE TRABALHO: ${params.type}
+    NORMA ACADÉMICA: ${params.norm}
+    TOM DE VOZ: ${params.tone}
+
+    OBJETIVO: Gerar conteúdo original, profundo e estritamente formatado conforme a norma solicitada.
+
+    ESTRUTURA DE RESPOSTA (JSON):
+    1. INTRODUÇÃO: Contexto, tese central e objetivos.
+    2. DESENVOLVIMENTO: Argumentação baseada em evidências, citações no estilo ${params.norm}.
+    3. CONCLUSÃO: Síntese e recomendações.
+    4. REFERÊNCIAS: Mínimo 5 fontes credíveis formatadas em ${params.norm}.
+
+    IMPORTANTE: 
+    - Se a norma for APA, use citações (Autor, Ano). 
+    - Se for ABNT, use (AUTOR, ano).
+    - Mantenha o tom ${params.tone} em todo o documento.
   `;
 
   try {
@@ -49,11 +56,10 @@ export const generateAcademicContent = async (params: {
       },
     });
 
-    // Fix: Accessing .text property directly (already correct in logic, but ensuring it returns string)
     const result = response.text || '{}';
     return JSON.parse(result);
   } catch (error) {
-    console.error("Erro ao gerar conteúdo Gemini:", error);
+    console.error("Erro na geração de IA:", error);
     throw error;
   }
 };

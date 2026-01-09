@@ -11,6 +11,14 @@ import { EditorPage } from './pages/EditorPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AcademicWork, UserProfile } from './types';
 
+// Componente para proteger rotas privadas
+const PrivateRoute: React.FC<{ user: UserProfile | null; children: React.ReactElement }> = ({ user, children }) => {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('sm_user');
@@ -23,7 +31,11 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('sm_user', JSON.stringify(user));
+    if (user) {
+      localStorage.setItem('sm_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('sm_user');
+    }
   }, [user]);
 
   useEffect(() => {
@@ -38,32 +50,61 @@ const App: React.FC = () => {
     setWorks(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
   };
 
+  const handleLogout = () => {
+    setUser(null);
+  };
+
   return (
     <Router>
       <Layout>
         <Routes>
+          {/* Rotas Públicas */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage onLogin={setUser} />} />
-          <Route path="/register" element={<RegisterPage onRegister={setUser} />} />
+          <Route 
+            path="/login" 
+            element={user ? <Navigate to="/dashboard" /> : <LoginPage onLogin={setUser} />} 
+          />
+          <Route 
+            path="/register" 
+            element={user ? <Navigate to="/dashboard" /> : <RegisterPage onRegister={setUser} />} 
+          />
           
+          {/* Rotas Privadas protegidas pelo PrivateRoute */}
           <Route 
             path="/dashboard" 
-            element={user ? <Dashboard works={works} user={user} /> : <Navigate to="/login" />} 
+            element={
+              <PrivateRoute user={user}>
+                <Dashboard works={works} user={user!} />
+              </PrivateRoute>
+            } 
           />
           <Route 
             path="/new" 
-            element={user ? <NewWork user={user} onCreated={addWork} /> : <Navigate to="/login" />} 
+            element={
+              <PrivateRoute user={user}>
+                <NewWork user={user!} onCreated={addWork} />
+              </PrivateRoute>
+            } 
           />
           <Route 
             path="/editor/:id" 
-            element={user ? <EditorPage works={works} onUpdate={updateWork} /> : <Navigate to="/login" />} 
+            element={
+              <PrivateRoute user={user}>
+                <EditorPage works={works} onUpdate={updateWork} />
+              </PrivateRoute>
+            } 
           />
           <Route 
             path="/profile" 
-            element={user ? <ProfilePage user={user} setUser={setUser} /> : <Navigate to="/login" />} 
+            element={
+              <PrivateRoute user={user}>
+                <ProfilePage user={user!} setUser={setUser} />
+              </PrivateRoute>
+            } 
           />
           
-          <Route path="*" element={<Navigate to="/" />} />
+          {/* Redirecionamento Padrão */}
+          <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} />} />
         </Routes>
       </Layout>
     </Router>

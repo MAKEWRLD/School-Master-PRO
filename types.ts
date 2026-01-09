@@ -1,3 +1,4 @@
+
 export enum WorkType {
   SIMPLE = 'Trabalho Escolar Simples',
   TECHNICAL = 'Trabalho Técnico',
@@ -25,6 +26,8 @@ export enum WorkStatus {
   READY = 'ready'
 }
 
+export type AcademicNorm = 'ABNT' | 'APA' | 'CHICAGO' | 'VANCOUVER';
+
 export interface AcademicContent {
   capa: string;
   folhaRosto: string;
@@ -39,6 +42,7 @@ export interface ContentVersion {
   timestamp: number;
   content: AcademicContent;
   label?: string;
+  authorId: string;
 }
 
 export interface AcademicWork {
@@ -51,7 +55,7 @@ export interface AcademicWork {
   author: string;
   city: string;
   year: string;
-  norm: 'ABNT';
+  norm: AcademicNorm;
   tone: string;
   content: AcademicContent;
   status: WorkStatus;
@@ -59,6 +63,7 @@ export interface AcademicWork {
   createdAt: number;
   updatedAt: number;
   versions: ContentVersion[];
+  paymentId?: string;
 }
 
 export interface UserProfile {
@@ -70,10 +75,12 @@ export interface UserProfile {
   city: string;
   points: number;
   avatar?: string;
+  token?: string;
 }
 
 export enum PaymentMethod {
   UNITEL_MONEY = 'Unitel Money',
   EXPRESS = 'Multicaixa Express',
-  PAYPAY = 'PayPay'
+  PAYPAY = 'PayPay',
+  PAYPAL = 'PayPal'
 }

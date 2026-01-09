@@ -1,82 +1,90 @@
+
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
+import { TDocumentDefinitions } from "pdfmake/interfaces";
+import { Document, Packer, Paragraph, AlignmentType, TextRun } from "docx";
+import FileSaver from "file-saver";
 import { AcademicWork } from "../types";
 
-// Setup pdfmake fonts with defensive check for ESM export structure
 const vfs = (pdfFonts as any)?.pdfMake?.vfs || (pdfFonts as any)?.vfs;
 if (vfs) {
   (pdfMake as any).vfs = vfs;
 }
 
+const saveAs = (FileSaver as any).saveAs || FileSaver;
+
 export const exportToPDF = async (work: AcademicWork) => {
-  const docDefinition: any = {
+  const isAPA = work.norm === 'APA';
+  
+  const docDefinition: TDocumentDefinitions = {
     pageSize: "A4",
-    // Margins in pt (1mm ≈ 2.83pt)
-    // ABNT: Top 30mm (85pt), Left 30mm (85pt), Bottom 20mm (57pt), Right 20mm (57pt)
-    pageMargins: [85, 85, 57, 57], 
+    pageMargins: [85, 85, 57, 57], // ABNT defaults
     defaultStyle: {
-      font: "Roboto", // pdfmake uses Roboto by default in its vfs_fonts
+      font: "Roboto",
       fontSize: 12,
       lineHeight: 1.5,
     },
     content: [
-      // CAPA
+      // Capa Profissional
       { text: work.institution.toUpperCase(), alignment: "center", bold: true, fontSize: 14, margin: [0, 0, 0, 40] },
       { text: work.author.toUpperCase(), alignment: "center", bold: true, fontSize: 12, margin: [0, 60, 0, 100] },
-      { text: work.title.toUpperCase(), alignment: "center", bold: true, fontSize: 16, margin: [0, 40, 0, 150] },
-      { text: work.city.toUpperCase(), alignment: "center", bold: true, margin: [0, 100, 0, 0] },
-      { text: work.year, alignment: "center", bold: true, pageBreak: "after" },
+      { text: work.title.toUpperCase(), alignment: "center", bold: true, fontSize: 18, margin: [0, 40, 0, 150] },
+      { text: `${work.city}\n${work.year}`, alignment: "center", bold: true, margin: [0, 100, 0, 0] },
 
-      // FOLHA DE ROSTO
-      { text: work.author.toUpperCase(), alignment: "center", bold: true, margin: [0, 0, 0, 40] },
-      { text: work.title.toUpperCase(), alignment: "center", bold: true, fontSize: 14, margin: [0, 80, 0, 40] },
-      {
-        columns: [
-          { width: "50%", text: "" },
-          {
-            width: "50%",
-            text: `${work.type} apresentado ao curso de ${work.course} da ${work.institution} como requisito parcial para obtenção de grau académico.`,
-            fontSize: 10,
-            alignment: "justify",
-            italics: true,
-          }
-        ],
-        margin: [0, 40, 0, 100]
-      },
-      { text: work.city.toUpperCase(), alignment: "center", bold: true, margin: [0, 100, 0, 0] },
-      { text: work.year, alignment: "center", bold: true, pageBreak: "after" },
-
-      // INTRODUCAO
-      { text: "1 INTRODUÇÃO", bold: true, fontSize: 12, margin: [0, 0, 0, 20] },
+      // Início do Conteúdo
+      { text: `1 INTRODUÇÃO (${work.norm})`, bold: true, fontSize: 12, margin: [0, 40, 0, 20], pageBreak: "before" },
       { text: work.content.introducao, alignment: "justify" },
 
-      // DESENVOLVIMENTO
       { text: "\n2 DESENVOLVIMENTO", bold: true, fontSize: 12, margin: [0, 20, 0, 20] },
       { text: work.content.desenvolvimento, alignment: "justify" },
 
-      // CONCLUSAO
       { text: "\n3 CONCLUSÃO", bold: true, fontSize: 12, margin: [0, 20, 0, 20] },
-      { text: work.content.conclusao, alignment: "justify", pageBreak: "after" },
+      { text: work.content.conclusao, alignment: "justify" },
 
-      // REFERENCIAS
-      { text: "REFERÊNCIAS", alignment: "center", bold: true, margin: [0, 0, 0, 30] },
+      { text: "REFERÊNCIAS", alignment: "center", bold: true, margin: [0, 40, 0, 30], pageBreak: "before" },
       {
         stack: work.content.referencias.split("\n").map(ref => ({ text: ref, margin: [0, 0, 0, 10], fontSize: 11 }))
       }
     ],
     footer: (currentPage: number) => {
-      // ABNT page numbering starts at the introduction, usually page 3
-      if (currentPage >= 3) {
-        return {
-          text: currentPage.toString(),
-          alignment: "right",
-          margin: [0, 20, 40, 0],
-          fontSize: 10
-        };
-      }
-      return "";
+      return {
+        text: currentPage.toString(),
+        alignment: isAPA ? "center" : "right",
+        margin: [0, 20, 40, 0],
+        fontSize: 10
+      };
     }
   };
 
-  pdfMake.createPdf(docDefinition).download(`SchoolMaster_${work.title.replace(/\s+/g, "_")}.pdf`);
+  pdfMake.createPdf(docDefinition).download(`SchoolMaster_${work.norm}_${work.title.replace(/\s+/g, "_")}.pdf`);
+};
+
+export const exportToDocx = async (work: AcademicWork) => {
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({ 
+            children: [new TextRun({ text: work.institution.toUpperCase(), bold: true, size: 28 })],
+            alignment: AlignmentType.CENTER 
+          }),
+          new Paragraph({ text: "\n\n" }),
+          new Paragraph({ 
+            children: [new TextRun({ text: work.title.toUpperCase(), bold: true, size: 36 })],
+            alignment: AlignmentType.CENTER 
+          }),
+          new Paragraph({ text: "", pageBreakBefore: true }),
+          new Paragraph({ children: [new TextRun({ text: "1 INTRODUÇÃO", bold: true })] }),
+          new Paragraph({ text: work.content.introducao, alignment: AlignmentType.JUSTIFIED }),
+          new Paragraph({ text: "", pageBreakBefore: true }),
+          new Paragraph({ children: [new TextRun({ text: "REFERÊNCIAS", bold: true })], alignment: AlignmentType.CENTER }),
+          ...work.content.referencias.split("\n").map(line => new Paragraph({ text: line }))
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `SchoolMaster_${work.title.replace(/\s+/g, "_")}.docx`);
 };

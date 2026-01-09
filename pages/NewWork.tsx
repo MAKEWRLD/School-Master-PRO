@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, Loader2, Check } from 'lucide-react';
@@ -32,6 +31,7 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
         tone: form.tone
       });
 
+      // Fix: Added missing updatedAt property to match AcademicWork interface
       const newWork: AcademicWork = {
         id: Math.random().toString(36).substr(2, 9),
         userId: user.id,
@@ -47,7 +47,8 @@ export const NewWork: React.FC<NewWorkProps> = ({ user, onCreated }) => {
         content: content,
         status: WorkStatus.PENDING_PAYMENT,
         price: WorkPricing[form.type],
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       };
 
       onCreated(newWork);

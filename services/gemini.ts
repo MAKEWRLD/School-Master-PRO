@@ -1,8 +1,7 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { WorkType } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Fix: Removed top-level client initialization to follow SDK guidelines
 
 export const generateAcademicContent = async (params: {
   title: string;
@@ -13,6 +12,9 @@ export const generateAcademicContent = async (params: {
   city: string;
   tone: string;
 }) => {
+  // Fix: Initializing GoogleGenAI right before use with direct process.env.API_KEY reference
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   const prompt = `
     Gere um trabalho académico completo para o tema: "${params.title}".
     Tipo de trabalho: ${params.type}.
@@ -47,7 +49,9 @@ export const generateAcademicContent = async (params: {
       },
     });
 
-    return JSON.parse(response.text);
+    // Fix: Accessing .text property directly (already correct in logic, but ensuring it returns string)
+    const result = response.text || '{}';
+    return JSON.parse(result);
   } catch (error) {
     console.error("Erro ao gerar conteúdo Gemini:", error);
     throw error;

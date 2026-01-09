@@ -26,6 +26,15 @@ export enum WorkStatus {
   READY = 'ready'
 }
 
+export interface AcademicContent {
+  capa: string;
+  folhaRosto: string;
+  introducao: string;
+  desenvolvimento: string;
+  conclusao: string;
+  referencias: string;
+}
+
 export interface AcademicWork {
   id: string;
   userId: string;
@@ -38,17 +47,11 @@ export interface AcademicWork {
   year: string;
   norm: 'ABNT';
   tone: string;
-  content: {
-    capa: string;
-    folhaRosto: string;
-    introducao: string;
-    desenvolvimento: string;
-    conclusao: string;
-    referencias: string;
-  };
+  content: AcademicContent;
   status: WorkStatus;
   price: number;
   createdAt: number;
+  updatedAt: number;
 }
 
 export interface UserProfile {
@@ -59,6 +62,7 @@ export interface UserProfile {
   course: string;
   city: string;
   points: number;
+  avatar?: string;
 }
 
 export enum PaymentMethod {
